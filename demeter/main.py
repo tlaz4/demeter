@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from reolink import Host
+from demeter.reolink import Host
 
 app = FastAPI()
 
