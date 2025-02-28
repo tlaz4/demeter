@@ -1,0 +1,8 @@
+services:
+  api:
+    build: .
+    container_name: "api"
+    volumes: 
+      - ./demeter:/demeter
+    ports:
+      - 8000:8000
