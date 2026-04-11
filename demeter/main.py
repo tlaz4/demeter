@@ -3,6 +3,10 @@ from demeter.reolink import Host
 
 app = FastAPI()
 
+@app.get("/status")
+async def status():
+    return {"status": True}
+
 
 @app.post("/move-to-preset/{preset}")
 async def move_to_preset(preset: str):

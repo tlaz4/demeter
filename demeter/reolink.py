@@ -1,11 +1,16 @@
 import xml.etree.ElementTree as ET
 
 from demeter.reolink_aio.reolink_aio.baichuan import Baichuan
+from settings import *
 import asyncio
+
+REOLINK_ADDRESS = "123"
+REOLINK_USERNAME = "exampl"
+REOLINK_PASSWORD = "abc123"
 
 class Host:
     def __init__(self):
-        self.host = Baichuan('192.168.1.78', 'admin', 'TyWater1995!!2')
+        self.host = Baichuan(settings.REOLINK_ADDRESS, settings.REOLINK_USERNAME, settings.REOLINK_PASSWORD)
 
     async def login(self):
         await self.host.login()
