@@ -1,8 +1,43 @@
 services:
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - 7233:7233
+    environment:
+      - DB=sqlite
+    healthcheck:
+      test: ["CMD", "tctl", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   api:
     build: .
-    container_name: "api"
-    volumes: 
-      - ./demeter:/demeter
+    container_name: api
+    volumes:
+      - demeter_data:/data
     ports:
       - 8000:8000
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - SOLAR_DB_PATH=/data/demeter.db
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  worker:
+    build: .
+    container_name: worker
+    working_dir: /app/demeter
+    command: python run_worker.py
+    volumes:
+      - demeter_data:/data
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - SOLAR_DB_PATH=/data/demeter.db
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+volumes:
+  demeter_data:

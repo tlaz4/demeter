@@ -1,11 +1,33 @@
 from fastapi import FastAPI, HTTPException
+
+from demeter import settings as _settings
+from demeter.db import get_session, init_db
+from demeter.models import SolarState
 from demeter.reolink import Host
 
 app = FastAPI()
 
+init_db()
+
+
 @app.get("/status")
 async def status():
     return {"status": True}
+
+
+@app.get("/solar/status")
+async def solar_status():
+    with get_session() as session:
+        state = session.get(SolarState, 1)
+    if state is None:
+        raise HTTPException(status_code=503, detail="Solar data not yet available")
+    soc = round((state.current_wh / _settings.BATTERY_CAPACITY_WH) * 100.0, 1)
+    return {
+        "soc_percent": soc,
+        "energy_wh": round(state.current_wh, 1),
+        "capacity_wh": _settings.BATTERY_CAPACITY_WH,
+        "last_updated": state.last_updated.isoformat(),
+    }
 
 
 @app.post("/move-to-preset/{preset}")

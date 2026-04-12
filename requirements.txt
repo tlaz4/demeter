@@ -47,3 +47,5 @@ uvloop==0.21.0
 watchfiles==1.0.4
 websockets==15.0
 yarl==1.18.3
+temporalio==1.25.0
+sqlalchemy>=2.0
