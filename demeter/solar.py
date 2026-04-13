@@ -80,12 +80,12 @@ class SolarSOCEstimator:
         if not self._initialised:
             self._initialised = True
             soc = self.voltage_soc(battery_voltage)
-            self.current_wh = effective_capacity * (soc / 100.0)
+            self.current_wh = self.capacity_wh * (soc / 100.0)
             logger.info("Seeded initial SOC from voltage %.2fV: %.1f%%", battery_voltage, soc)
             self._save_state(soc_percent=soc)
             return soc
 
-        # Coulomb counting
+        # Coulomb counting — clamp to derated capacity so we don't overcount on cold nights
         net_power_w = solar_power_w - load_power_w
         delta_wh = net_power_w * (dt_seconds / 3600.0)
         self.current_wh = max(0.0, min(effective_capacity, self.current_wh + delta_wh))
@@ -96,7 +96,8 @@ class SolarSOCEstimator:
         elif battery_voltage <= _VOLTAGE_EMPTY:
             self.current_wh = 0.0
 
-        soc = round((self.current_wh / effective_capacity) * 100.0, 1)
+        # Report against nominal capacity so SOC doesn't swing with temperature
+        soc = round((self.current_wh / self.capacity_wh) * 100.0, 1)
         self._save_state(soc_percent=soc)
         return soc
 
