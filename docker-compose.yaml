@@ -25,11 +25,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+    restart: on-failure
 
   api:
     build: .
@@ -42,8 +38,8 @@ services:
       - TEMPORAL_HOST=temporal:7233
       - SOLAR_DB_PATH=/data/demeter.db
     depends_on:
-      temporal:
-        condition: service_healthy
+      - temporal
+    restart: on-failure
 
   worker:
     build: .
@@ -56,8 +52,8 @@ services:
       - TEMPORAL_HOST=temporal:7233
       - SOLAR_DB_PATH=/data/demeter.db
     depends_on:
-      temporal:
-        condition: service_healthy
+      - temporal
+    restart: on-failure
 
 volumes:
   postgres_data:
