@@ -21,9 +21,8 @@ async def solar_status():
         state = session.get(SolarState, 1)
         if state is None:
             raise HTTPException(status_code=503, detail="Solar data not yet available")
-        soc = round((state.current_wh / _settings.BATTERY_CAPACITY_WH) * 100.0, 1)
         return {
-            "soc_percent": soc,
+            "soc_percent": state.soc_percent,
             "energy_wh": round(state.current_wh, 1),
             "capacity_wh": _settings.BATTERY_CAPACITY_WH,
             "last_updated": state.last_updated.isoformat(),

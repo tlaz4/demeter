@@ -79,10 +79,11 @@ class SolarSOCEstimator:
         # On first run with no saved state, seed from voltage rather than 50%
         if not self._initialised:
             self._initialised = True
-            self.current_wh = effective_capacity * (self.voltage_soc(battery_voltage) / 100.0)
-            logger.info("Seeded initial SOC from voltage %.2fV: %.1f%%", battery_voltage, self.voltage_soc(battery_voltage))
-            self._save_state()
-            return round((self.current_wh / effective_capacity) * 100.0, 1)
+            soc = self.voltage_soc(battery_voltage)
+            self.current_wh = effective_capacity * (soc / 100.0)
+            logger.info("Seeded initial SOC from voltage %.2fV: %.1f%%", battery_voltage, soc)
+            self._save_state(soc_percent=soc)
+            return soc
 
         # Coulomb counting
         net_power_w = solar_power_w - load_power_w
@@ -95,8 +96,9 @@ class SolarSOCEstimator:
         elif battery_voltage <= _VOLTAGE_EMPTY:
             self.current_wh = 0.0
 
-        self._save_state()
-        return round((self.current_wh / effective_capacity) * 100.0, 1)
+        soc = round((self.current_wh / effective_capacity) * 100.0, 1)
+        self._save_state(soc_percent=soc)
+        return soc
 
     def voltage_soc(self, voltage: float) -> float:
         """Reference-only SOC estimate from resting voltage."""
@@ -110,16 +112,18 @@ class SolarSOCEstimator:
     # Persistence via DB
     # ------------------------------------------------------------------
 
-    def _save_state(self) -> None:
+    def _save_state(self, soc_percent: float = None) -> None:
         try:
             from db import get_session
             from models import SolarState
+            soc = soc_percent if soc_percent is not None else self.soc_percent
             with get_session() as session:
                 state = session.get(SolarState, 1)
                 if state is None:
-                    session.add(SolarState(id=1, current_wh=self.current_wh, last_updated=self.last_updated))
+                    session.add(SolarState(id=1, current_wh=self.current_wh, soc_percent=soc, last_updated=self.last_updated))
                 else:
                     state.current_wh = self.current_wh
+                    state.soc_percent = soc
                     state.last_updated = self.last_updated
         except Exception as e:
             logger.warning("Failed to save solar state: %s", e)

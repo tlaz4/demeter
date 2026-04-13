@@ -14,4 +14,5 @@ class SolarState(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     current_wh: Mapped[float] = mapped_column(Float, nullable=False)
+    soc_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
