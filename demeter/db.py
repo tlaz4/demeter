@@ -24,7 +24,7 @@ def _build_engine():
 
 
 _engine = _build_engine()
-_SessionLocal = sessionmaker(bind=_engine)
+_SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
 
 
 def init_db() -> None:
