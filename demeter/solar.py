@@ -53,8 +53,9 @@ def _interpolate(table: list, x: float) -> float:
 class SolarSOCEstimator:
     def __init__(self, capacity_wh: float):
         self.capacity_wh = capacity_wh
-        self.current_wh = capacity_wh * 0.5   # default 50% until state is loaded
+        self.current_wh = capacity_wh * 0.5
         self.last_updated: datetime = datetime.now(timezone.utc)
+        self._initialised = False
         self._load_state()
 
     # ------------------------------------------------------------------
@@ -74,6 +75,14 @@ class SolarSOCEstimator:
 
         temp_factor = _interpolate(_TEMP_DERATING, battery_temp_c)
         effective_capacity = self.capacity_wh * temp_factor
+
+        # On first run with no saved state, seed from voltage rather than 50%
+        if not self._initialised:
+            self._initialised = True
+            self.current_wh = effective_capacity * (self.voltage_soc(battery_voltage) / 100.0)
+            logger.info("Seeded initial SOC from voltage %.2fV: %.1f%%", battery_voltage, self.voltage_soc(battery_voltage))
+            self._save_state()
+            return round((self.current_wh / effective_capacity) * 100.0, 1)
 
         # Coulomb counting
         net_power_w = solar_power_w - load_power_w
@@ -125,6 +134,7 @@ class SolarSOCEstimator:
                     self.current_wh = state.current_wh
                     ts = state.last_updated
                     self.last_updated = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+                    self._initialised = True
                     logger.info("Loaded solar state: %.1f Wh (%.1f%%)", self.current_wh, self.soc_percent)
         except Exception as e:
             logger.warning("Failed to load solar state, starting at 50%%: %s", e)
