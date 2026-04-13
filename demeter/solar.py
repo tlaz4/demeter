@@ -2,6 +2,11 @@ import bisect
 import logging
 from datetime import datetime, timezone
 
+try:
+    from demeter import settings as _settings
+except ImportError:
+    import settings as _settings
+
 logger = logging.getLogger(__name__)
 
 # LiFePO4 4S (12V pack) resting voltage → SOC lookup table
@@ -143,3 +148,69 @@ class SolarSOCEstimator:
                     logger.info("Loaded solar state: %.1f Wh (%.1f%%)", self.current_wh, self.soc_percent)
         except Exception as e:
             logger.warning("Failed to load solar state, starting at 50%%: %s", e)
+
+
+class SolarHAClient:
+    """Solar-specific Home Assistant interactions."""
+
+    def __init__(self, ha_client):
+        self._ha = ha_client
+
+    async def get_solar_data(self) -> dict:
+        from home_assistant import HomeAssistantError
+        voltage_state = await self._ha.get_state(_settings.HA_ENTITY_BATTERY_VOLTAGE)
+        power_state   = await self._ha.get_state(_settings.HA_ENTITY_SOLAR_POWER)
+        temp_state    = await self._ha.get_state(_settings.HA_ENTITY_BATTERY_TEMP)
+
+        try:
+            return {
+                "battery_voltage": float(voltage_state["state"]),
+                "solar_power_w":   float(power_state["state"]),
+                "battery_temp_c":  float(temp_state["state"]),
+            }
+        except (KeyError, ValueError) as e:
+            raise HomeAssistantError(f"Failed to parse solar data: {e}") from e
+
+    async def get_load_power_w(self) -> float:
+        from home_assistant import HomeAssistantError
+        total = 0.0
+        for load in _settings.LOADS:
+            load_type = load.get("type")
+            name = load.get("name")
+            try:
+                state = await self._ha.get_state(load.get("entity_id"))
+                total += self._calc_load_power(state, load_type, name, load.get("power_w", 0.0))
+            except HomeAssistantError:
+                logger.warning("Could not get state for load '%s', assuming off", name)
+        return total
+
+    def _calc_load_power(self, state: dict, load_type: str, name: str, power_w: float) -> float:
+        raw = state.get("state", "unavailable")
+
+        if load_type == "binary":
+            if raw not in ("on", "off", "unavailable"):
+                logger.warning("Unexpected state '%s' for load '%s'", raw, name)
+            return power_w if raw == "on" else 0.0
+
+        if load_type == "percentage":
+            if raw == "off":
+                return 0.0
+            pct = float(state.get("attributes", {}).get("percentage") or 0) / 100.0
+            return power_w * pct
+
+        if load_type == "sensor":
+            return float(raw) if raw not in ("unavailable", "unknown") else 0.0
+
+        logger.warning("Unknown load type '%s' for load '%s'", load_type, name)
+        return 0.0
+
+    async def push_soc(self, soc: float) -> None:
+        await self._ha.push_state(
+            _settings.HA_ENTITY_SOC,
+            state=str(soc),
+            attributes={
+                "unit_of_measurement": "%",
+                "friendly_name": "Battery SOC",
+                "device_class": "battery",
+            },
+        )
