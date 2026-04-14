@@ -98,11 +98,12 @@ class SolarSOCEstimator:
         # Hard voltage anchors at extremes
         if battery_voltage >= _VOLTAGE_FULL:
             self.current_wh = effective_capacity
+            soc = 100.0
         elif battery_voltage <= _VOLTAGE_EMPTY:
             self.current_wh = 0.0
-
-        # Report against nominal capacity so SOC doesn't swing with temperature
-        soc = round((self.current_wh / self.capacity_wh) * 100.0, 1)
+            soc = 0.0
+        else:
+            soc = round((self.current_wh / self.capacity_wh) * 100.0, 1)
         self._save_state(soc_percent=soc)
         return soc
 
