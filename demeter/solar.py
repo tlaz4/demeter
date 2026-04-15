@@ -90,20 +90,21 @@ class SolarSOCEstimator:
             self._save_state(soc_percent=soc)
             return soc
 
-        # Coulomb counting — clamp to derated capacity so we don't overcount on cold nights
+        # Coulomb counting — only cap at derated capacity when charging so a temperature
+        # dip doesn't retroactively remove energy from the accumulator
         net_power_w = solar_power_w - load_power_w
         delta_wh = net_power_w * (dt_seconds / 3600.0)
-        self.current_wh = max(0.0, min(effective_capacity, self.current_wh + delta_wh))
+        self.current_wh = max(0.0, self.current_wh + delta_wh)
+        if net_power_w > 0:
+            self.current_wh = min(effective_capacity, self.current_wh)
 
         # Hard voltage anchors at extremes
         if battery_voltage >= _VOLTAGE_FULL:
             self.current_wh = effective_capacity
-            soc = 100.0
         elif battery_voltage <= _VOLTAGE_EMPTY:
             self.current_wh = 0.0
-            soc = 0.0
-        else:
-            soc = round((self.current_wh / self.capacity_wh) * 100.0, 1)
+
+        soc = round((self.current_wh / self.capacity_wh) * 100.0, 1)
         self._save_state(soc_percent=soc)
         return soc
 
