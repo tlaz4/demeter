@@ -38,8 +38,9 @@ _TEMP_DERATING = [
 ]
 
 # Voltage thresholds for hard anchoring
-_VOLTAGE_FULL  = 13.8   # snap to 100% — absorption/float complete
-_VOLTAGE_EMPTY = 12.0   # snap to 0% — low-voltage cutoff
+_VOLTAGE_FULL         = 13.8   # snap to 100% — absorption/float complete
+_VOLTAGE_FULL_RELEASE = 13.5   # must drop below this before leaving anchored-full state
+_VOLTAGE_EMPTY        = 12.0   # snap to 0% — low-voltage cutoff
 
 
 def _interpolate(table: list, x: float) -> float:
@@ -61,6 +62,7 @@ class SolarSOCEstimator:
         self.current_wh = capacity_wh * 0.5
         self.last_updated: datetime = datetime.now(timezone.utc)
         self._initialised = False
+        self._anchored_full = False
         self._load_state()
 
     # ------------------------------------------------------------------
@@ -98,13 +100,21 @@ class SolarSOCEstimator:
         if net_power_w > 0:
             self.current_wh = min(effective_capacity, self.current_wh)
 
-        # Hard voltage anchors at extremes
+        # Hysteresis: latch into anchored-full when voltage hits ceiling; only release
+        # once voltage has dropped clearly below float level to prevent oscillation.
         if battery_voltage >= _VOLTAGE_FULL:
-            self.current_wh = effective_capacity
+            self._anchored_full = True
+        elif battery_voltage < _VOLTAGE_FULL_RELEASE:
+            self._anchored_full = False
+
+        if self._anchored_full:
+            self.current_wh = self.capacity_wh
+            soc = 100.0
         elif battery_voltage <= _VOLTAGE_EMPTY:
             self.current_wh = 0.0
-
-        soc = round((self.current_wh / self.capacity_wh) * 100.0, 1)
+            soc = 0.0
+        else:
+            soc = round((self.current_wh / self.capacity_wh) * 100.0, 1)
         self._save_state(soc_percent=soc)
         return soc
 
@@ -147,6 +157,7 @@ class SolarSOCEstimator:
                     ts = state.last_updated
                     self.last_updated = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
                     self._initialised = True
+                    self._anchored_full = state.soc_percent >= 100.0
                     logger.info("Loaded solar state: %.1f Wh (%.1f%%)", self.current_wh, self.soc_percent)
         except Exception as e:
             logger.warning("Failed to load solar state, starting at 50%%: %s", e)
