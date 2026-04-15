@@ -107,6 +107,13 @@ class TestTemperatureDerating(unittest.TestCase):
         _update(self.est, solar_w=10000.0, load_w=0.0, temp=0.0)
         self.assertLessEqual(self.est.current_wh, 960.0)
 
+    def test_cold_does_not_retroactively_remove_energy(self):
+        # Already above the cold ceiling (from a warmer period): a subsequent
+        # charge tick in the cold must not snap the accumulator down.
+        self.est.current_wh = 1100.0
+        _update(self.est, solar_w=10.0, load_w=0.0, temp=0.0)
+        self.assertGreaterEqual(self.est.current_wh, 1100.0)
+
     def test_soc_reported_against_nominal(self):
         # SOC should be stable at 50% regardless of temperature
         soc_warm = _update(self.est, solar_w=50.0, load_w=50.0, temp=25.0)
@@ -124,12 +131,36 @@ class TestFirstRunVoltageSeed(unittest.TestCase):
         self.assertTrue(est._initialised)
 
     def test_first_run_ignores_coulomb(self):
-        # Even with huge solar input, first run should use voltage not coulomb
+        # Seed comes from voltage, not from integrating the first tick's net power.
         est = _make_estimator(initialised=False)
         with patch.object(est, "_save_state"):
-            soc = est.update(solar_power_w=10000.0, load_power_w=0.0,
+            soc = est.update(solar_power_w=5.0, load_power_w=5.0,
                              battery_voltage=13.0, battery_temp_c=25.0)
         self.assertAlmostEqual(soc, 10.0, delta=0.5)
+
+    def test_defers_seed_when_under_load(self):
+        # Large net discharge means voltage sags below rest — seeding from it
+        # would land on the wrong SOC. The estimator should refuse to seed.
+        est = _make_estimator(initialised=False)
+        soc = _update(est, solar_w=0.0, load_w=200.0, voltage=13.0)
+        self.assertFalse(est._initialised)
+        # Default unseeded state is 50% (capacity_wh * 0.5)
+        self.assertAlmostEqual(soc, 50.0, delta=0.1)
+
+    def test_defers_seed_when_charging_hard(self):
+        # Large net charge elevates voltage above rest — also not trustworthy.
+        est = _make_estimator(initialised=False)
+        soc = _update(est, solar_w=200.0, load_w=0.0, voltage=13.6)
+        self.assertFalse(est._initialised)
+        self.assertAlmostEqual(soc, 50.0, delta=0.1)
+
+    def test_seeds_on_next_quiet_tick_after_deferral(self):
+        est = _make_estimator(initialised=False)
+        _update(est, solar_w=0.0, load_w=200.0, voltage=13.0)
+        self.assertFalse(est._initialised)
+        soc = _update(est, solar_w=5.0, load_w=5.0, voltage=13.6)
+        self.assertTrue(est._initialised)
+        self.assertAlmostEqual(soc, 98.0, delta=0.1)
 
     def test_subsequent_run_skips_voltage_seed(self):
         est = _make_estimator(current_wh=600.0, initialised=True)
