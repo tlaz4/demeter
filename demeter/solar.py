@@ -153,12 +153,12 @@ class SolarSOCEstimator:
         # release once it's moved clearly past the release threshold.
         if battery_voltage >= _VOLTAGE_FULL:
             self._anchored_full = True
-        elif battery_voltage < _VOLTAGE_FULL_RELEASE:
+        elif battery_voltage <= _VOLTAGE_FULL_RELEASE:
             self._anchored_full = False
 
         if battery_voltage <= _VOLTAGE_EMPTY:
             self._anchored_empty = True
-        elif battery_voltage > _VOLTAGE_EMPTY_RELEASE:
+        elif battery_voltage >= _VOLTAGE_EMPTY_RELEASE:
             self._anchored_empty = False
 
         if self._anchored_full:
