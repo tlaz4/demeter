@@ -24,6 +24,14 @@ class HomeAssistantClient:
                     raise HomeAssistantError(f"HA returned {resp.status} for {entity_id}")
                 return await resp.json()
 
+    async def call_service(self, domain: str, service: str, data: dict) -> None:
+        url = f"{_settings.HA_URL}/api/services/{domain}/{service}"
+        headers = {"Authorization": f"Bearer {_settings.HA_TOKEN}"}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=data, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status not in (200, 201):
+                    raise HomeAssistantError(f"HA returned {resp.status} calling {domain}.{service}")
+
     async def push_state(self, entity_id: str, state: str, attributes: dict = None) -> None:
         url = f"{_settings.HA_URL}/api/states/{entity_id}"
         headers = {"Authorization": f"Bearer {_settings.HA_TOKEN}"}
