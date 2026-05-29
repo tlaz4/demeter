@@ -16,8 +16,8 @@ from temporalio.client import (
 )
 
 import settings as _settings
-from shared import PLANT_SNAPSHOT_TASK_QUEUE_NAME, SOLAR_POLL_TASK_QUEUE_NAME
-from workflows import PlantSnapshot, SolarPoll
+from shared import CLIMATE_CONTROL_TASK_QUEUE_NAME, PLANT_SNAPSHOT_TASK_QUEUE_NAME, SOLAR_POLL_TASK_QUEUE_NAME
+from workflows import ClimateControl, PlantSnapshot, SolarPoll
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,21 @@ _SCHEDULES = [
             ),
             policy=SchedulePolicy(overlap=ScheduleOverlapPolicy.SKIP),
             state=ScheduleState(note="Solar battery SOC estimation via coulomb counting."),
+        ),
+    ),
+    (
+        "climate-control-schedule-id",
+        Schedule(
+            action=ScheduleActionStartWorkflow(
+                ClimateControl.run,
+                id="climate-control-workflow-id",
+                task_queue=CLIMATE_CONTROL_TASK_QUEUE_NAME,
+            ),
+            spec=ScheduleSpec(
+                intervals=[ScheduleIntervalSpec(every=timedelta(seconds=_settings.CLIMATE_POLL_INTERVAL_S))]
+            ),
+            policy=SchedulePolicy(overlap=ScheduleOverlapPolicy.SKIP),
+            state=ScheduleState(note="Climate control: observe, decide, act via Q-learning."),
         ),
     ),
 ]

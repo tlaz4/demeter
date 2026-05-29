@@ -30,3 +30,21 @@ LOADS = [
     {"name": "fans", "entity_id": "fan.greenhouse_power_module_fan", "power_w": 48.0, "type": "percentage"},
     {"name": "mppt_load", "entity_id": "sensor.greenhouse_solar_module_load_power", "power_w": 0.0, "type": "sensor"},
 ]
+
+# Climate control
+HA_ENTITY_FAN = "fan.greenhouse_power_module_fan"
+HA_ENTITY_AIR_TEMPS = [
+    "sensor.greenhouse_sensor1_greenhouse_air_temperature",
+    "sensor.greenhouse_sensor1_greenhouse_node_1_temperature",
+    "sensor.greenhouse_solar_module_battery_temperature"
+]
+HA_ENTITY_HUMIDITY = "sensor.greenhouse_sensor1_greenhouse_air_humidity"
+HA_ENTITY_WEATHER_FORECAST = "sensor.edmonton_high_temperature"
+CLIMATE_TEMP_MIN_C = 13.0
+CLIMATE_TEMP_MAX_C = 28.0
+CLIMATE_SAFETY_SOC_MIN = 15.0
+CLIMATE_SAFETY_TEMP_MAX = 38.0
+CLIMATE_REWARD_COMFORT_WEIGHT = 1.0
+CLIMATE_REWARD_ENERGY_WEIGHT = 0.3
+CLIMATE_POLL_INTERVAL_S = 120
+CLIMATE_MODEL_PATH = "/data/climate_q.json"

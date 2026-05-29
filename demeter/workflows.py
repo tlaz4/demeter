@@ -4,7 +4,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from activities import PlantSnapshotActvities, SolarPollActivities
+    from activities import ClimateControlActivities, PlantSnapshotActvities, SolarPollActivities
 
 
 @workflow.defn
@@ -34,5 +34,16 @@ class SolarPoll:
         return await workflow.execute_activity_method(
             SolarPollActivities.poll_solar,
             start_to_close_timeout=timedelta(seconds=25),
+            retry_policy=RetryPolicy(maximum_attempts=2),
+        )
+
+
+@workflow.defn
+class ClimateControl:
+    @workflow.run
+    async def run(self) -> dict:
+        return await workflow.execute_activity_method(
+            ClimateControlActivities.run_climate_control,
+            start_to_close_timeout=timedelta(seconds=30),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
