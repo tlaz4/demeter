@@ -115,8 +115,8 @@ class ClimateControlActivities:
         self._prev_log_id = self._log_decision(obs, action, policy_name, reason)
 
         logger.info(
-            "Climate: %.1f°C / %.1f%% RH | SOC %.1f%% | Fan %d%% | %s (%s) | reward=%s",
-            obs.air_temp_c, obs.humidity_pct, obs.soc_pct,
+            "Climate: %.1f°C / %.1f%% RH | SOC %.1f%% | Forecast %.0f°C | Fan %d%% | %s (%s) | reward=%s",
+            obs.air_temp_c, obs.humidity_pct, obs.soc_pct, obs.forecast_high_c,
             action.fan_percentage, reason, policy_name,
             f"{reward:.3f}" if reward is not None else "n/a",
         )
