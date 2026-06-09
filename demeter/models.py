@@ -47,5 +47,4 @@ class DecisionLog(Base):
             "policy_name": self.policy_name,
             "reason": self.reason,
             "reward": self.reward,
-            "observation": obs,
         }

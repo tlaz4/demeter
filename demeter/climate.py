@@ -97,7 +97,16 @@ def compute_reward(obs: ClimateObservation, action: ClimateAction) -> float:
     temp_min = _settings.CLIMATE_TEMP_MIN_C
     temp_max = _settings.CLIMATE_TEMP_MAX_C
     comfort = -(max(0, temp_min - temp, temp - temp_max)) ** 2
-    energy = -(action.fan_percentage / 100.0)
+
+    # Energy only becomes expensive as the battery drains toward its safety
+    # floor. While SOC is healthy (solar keeps it topped up) the fan is treated
+    # as nearly free, so we don't suppress cooling the greenhouse actually needs.
+    soc_min = _settings.CLIMATE_SAFETY_SOC_MIN
+    soc_comfort = _settings.CLIMATE_SOC_COMFORT
+    scarcity = (soc_comfort - obs.soc_pct) / (soc_comfort - soc_min)
+    scarcity = min(1.0, max(_settings.CLIMATE_ENERGY_FLOOR, scarcity))
+    energy = -(action.fan_percentage / 100.0) * scarcity
+
     return _settings.CLIMATE_REWARD_COMFORT_WEIGHT * comfort + _settings.CLIMATE_REWARD_ENERGY_WEIGHT * energy
 
 

@@ -158,53 +158,65 @@ class TestSafetyOverride(unittest.TestCase):
 
 
 class TestComputeReward(unittest.TestCase):
-    @patch("climate._settings")
-    def test_in_range_zero_comfort_penalty(self, mock_settings):
+    @staticmethod
+    def _configure(mock_settings, comfort_weight=1.0, energy_weight=0.0):
         mock_settings.CLIMATE_TEMP_MIN_C = 13.0
         mock_settings.CLIMATE_TEMP_MAX_C = 28.0
-        mock_settings.CLIMATE_REWARD_COMFORT_WEIGHT = 1.0
-        mock_settings.CLIMATE_REWARD_ENERGY_WEIGHT = 0.0
+        mock_settings.CLIMATE_REWARD_COMFORT_WEIGHT = comfort_weight
+        mock_settings.CLIMATE_REWARD_ENERGY_WEIGHT = energy_weight
+        mock_settings.CLIMATE_SAFETY_SOC_MIN = 15.0
+        mock_settings.CLIMATE_SOC_COMFORT = 40.0
+        mock_settings.CLIMATE_ENERGY_FLOOR = 0.1
+
+    @patch("climate._settings")
+    def test_in_range_zero_comfort_penalty(self, mock_settings):
+        self._configure(mock_settings)
         obs = _obs(air_temp_c=20.0)
         action = ClimateAction(fan=FanAction(percentage=50))
         self.assertEqual(compute_reward(obs, action), 0.0)
 
     @patch("climate._settings")
     def test_above_range_negative_penalty(self, mock_settings):
-        mock_settings.CLIMATE_TEMP_MIN_C = 13.0
-        mock_settings.CLIMATE_TEMP_MAX_C = 28.0
-        mock_settings.CLIMATE_REWARD_COMFORT_WEIGHT = 1.0
-        mock_settings.CLIMATE_REWARD_ENERGY_WEIGHT = 0.0
+        self._configure(mock_settings)
         obs = _obs(air_temp_c=33.0)
         action = ClimateAction(fan=FanAction(percentage=0))
         self.assertAlmostEqual(compute_reward(obs, action), -25.0)
 
     @patch("climate._settings")
     def test_below_range_negative_penalty(self, mock_settings):
-        mock_settings.CLIMATE_TEMP_MIN_C = 13.0
-        mock_settings.CLIMATE_TEMP_MAX_C = 28.0
-        mock_settings.CLIMATE_REWARD_COMFORT_WEIGHT = 1.0
-        mock_settings.CLIMATE_REWARD_ENERGY_WEIGHT = 0.0
+        self._configure(mock_settings)
         obs = _obs(air_temp_c=10.0)
         action = ClimateAction(fan=FanAction(percentage=0))
         self.assertAlmostEqual(compute_reward(obs, action), -9.0)
 
     @patch("climate._settings")
-    def test_energy_cost(self, mock_settings):
-        mock_settings.CLIMATE_TEMP_MIN_C = 13.0
-        mock_settings.CLIMATE_TEMP_MAX_C = 28.0
-        mock_settings.CLIMATE_REWARD_COMFORT_WEIGHT = 0.0
-        mock_settings.CLIMATE_REWARD_ENERGY_WEIGHT = 1.0
-        obs = _obs(air_temp_c=20.0)
+    def test_energy_cost_full_at_safety_soc(self, mock_settings):
+        # At the SOC safety floor, energy is charged at full cost.
+        self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
+        obs = _obs(air_temp_c=20.0, soc_pct=15.0)
         action = ClimateAction(fan=FanAction(percentage=100))
         self.assertAlmostEqual(compute_reward(obs, action), -1.0)
 
     @patch("climate._settings")
+    def test_energy_nearly_free_when_battery_full(self, mock_settings):
+        # High SOC -> scarcity clamped to the floor (0.1), so the fan is ~free.
+        self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
+        obs = _obs(air_temp_c=20.0, soc_pct=98.0)
+        action = ClimateAction(fan=FanAction(percentage=100))
+        self.assertAlmostEqual(compute_reward(obs, action), -0.1)
+
+    @patch("climate._settings")
+    def test_energy_scales_between_floor_and_safety(self, mock_settings):
+        # Midway (soc=27.5) between safety floor (15) and comfort (40) -> scarcity 0.5.
+        self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
+        obs = _obs(air_temp_c=20.0, soc_pct=27.5)
+        action = ClimateAction(fan=FanAction(percentage=100))
+        self.assertAlmostEqual(compute_reward(obs, action), -0.5)
+
+    @patch("climate._settings")
     def test_no_fan_no_energy_cost(self, mock_settings):
-        mock_settings.CLIMATE_TEMP_MIN_C = 13.0
-        mock_settings.CLIMATE_TEMP_MAX_C = 28.0
-        mock_settings.CLIMATE_REWARD_COMFORT_WEIGHT = 0.0
-        mock_settings.CLIMATE_REWARD_ENERGY_WEIGHT = 1.0
-        obs = _obs(air_temp_c=20.0)
+        self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
+        obs = _obs(air_temp_c=20.0, soc_pct=15.0)
         action = ClimateAction(fan=None)
         self.assertAlmostEqual(compute_reward(obs, action), 0.0)
 

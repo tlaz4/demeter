@@ -40,9 +40,13 @@ class TestDecisionLogToApiDict(unittest.TestCase):
     def test_timestamp_is_isoformat(self):
         self.assertEqual(_row().to_api_dict()["timestamp"], "2026-05-29T12:00:00+00:00")
 
-    def test_full_observation_preserved(self):
+    def test_remaining_observation_fields_flattened(self):
         d = _row().to_api_dict()
-        self.assertEqual(d["observation"]["humidity_pct"], 40.0)
+        self.assertEqual(d["humidity_pct"], 40.0)
+        self.assertEqual(d["forecast_high_c"], 33.0)
+
+    def test_no_redundant_observation_blob(self):
+        self.assertNotIn("observation", _row().to_api_dict())
 
     def test_null_fan_defaults_to_zero(self):
         d = _row(action={"fan": None}).to_api_dict()
