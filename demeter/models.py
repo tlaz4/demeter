@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from sqlalchemy import Integer, Float, DateTime, String, Text
@@ -28,3 +29,23 @@ class DecisionLog(Base):
     policy_name: Mapped[str] = mapped_column(String(64), nullable=False)
     reason: Mapped[str] = mapped_column(String(128), nullable=False)
     reward: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    def to_api_dict(self) -> dict:
+        """Flatten the stored JSON into analysis-friendly fields for the API."""
+        obs = json.loads(self.observation_json)
+        action = json.loads(self.action_json)
+        fan = action.get("fan") or {}
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat(),
+            "air_temp_c": obs.get("air_temp_c"),
+            "humidity_pct": obs.get("humidity_pct"),
+            "soc_pct": obs.get("soc_pct"),
+            "solar_power_w": obs.get("solar_power_w"),
+            "forecast_high_c": obs.get("forecast_high_c"),
+            "fan_percentage": fan.get("percentage", 0),
+            "policy_name": self.policy_name,
+            "reason": self.reason,
+            "reward": self.reward,
+            "observation": obs,
+        }

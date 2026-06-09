@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+from sqlalchemy import select
 
 from demeter import settings as _settings
 from demeter.db import get_session, init_db
-from demeter.models import SolarState
+from demeter.models import DecisionLog, SolarState
 from demeter.reolink import Host
 
 app = FastAPI()
@@ -27,6 +28,18 @@ async def solar_status():
             "capacity_wh": _settings.BATTERY_CAPACITY_WH,
             "last_updated": state.last_updated.isoformat(),
         }
+
+
+@app.get("/climate/decisions")
+async def climate_decisions(limit: int = Query(default=200, ge=1, le=2000)):
+    """Recent climate decisions for offline policy analysis (most recent first)."""
+    with get_session() as session:
+        rows = session.scalars(
+            select(DecisionLog).order_by(DecisionLog.id.desc()).limit(limit)
+        ).all()
+        decisions = [row.to_api_dict() for row in rows]
+
+    return {"count": len(decisions), "decisions": decisions}
 
 
 @app.post("/move-to-preset/{preset}")
