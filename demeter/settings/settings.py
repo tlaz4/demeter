@@ -48,9 +48,16 @@ CLIMATE_REWARD_COMFORT_WEIGHT = 1.0
 CLIMATE_REWARD_ENERGY_WEIGHT = 0.3
 # Energy is only "expensive" as SOC drains toward the safety floor. At/above
 # CLIMATE_SOC_COMFORT the fan is treated as ~free (solar keeps the battery
-# topped up), scaling to full cost at CLIMATE_SAFETY_SOC_MIN. The floor keeps a
-# small cost even when full so the agent still prefers minimum effective fan.
+# topped up), scaling to full cost at CLIMATE_SAFETY_SOC_MIN.
 CLIMATE_SOC_COMFORT = 40.0
+# Per-tick energy cost has a minimum floor so the agent still prefers minimum
+# effective fan. The floor is daylight-dependent: in daytime (solar present to
+# recharge) it stays low so cooling isn't suppressed; at night (no recharge)
+# it rises so the fan isn't run pointlessly, draining the battery until sunrise.
+# CLIMATE_SOLAR_DAYLIGHT_W is the day/night cutoff and MUST match the lower
+# solar bin edge in climate.BIN_EDGES so the policy can act on the same boundary.
 CLIMATE_ENERGY_FLOOR = 0.1
+CLIMATE_ENERGY_FLOOR_NIGHT = 0.5
+CLIMATE_SOLAR_DAYLIGHT_W = 10.0
 CLIMATE_POLL_INTERVAL_S = 120
 CLIMATE_MODEL_PATH = "/data/climate_q.json"

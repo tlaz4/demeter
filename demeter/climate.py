@@ -57,7 +57,10 @@ BIN_EDGES = {
     "temp": [13, 20, 28, 35],
     "humidity": [40, 65, 85],
     "soc": [15, 30, 60],
-    "solar": [10, 100],
+    # Lower edge is the day/night cutoff and is kept equal to the reward's
+    # daylight threshold so the policy can condition on the same boundary the
+    # energy cost switches on (see compute_reward).
+    "solar": [_settings.CLIMATE_SOLAR_DAYLIGHT_W, 100],
     "forecast": [20, 30],
 }
 
@@ -104,7 +107,12 @@ def compute_reward(obs: ClimateObservation, action: ClimateAction) -> float:
     soc_min = _settings.CLIMATE_SAFETY_SOC_MIN
     soc_comfort = _settings.CLIMATE_SOC_COMFORT
     scarcity = (soc_comfort - obs.soc_pct) / (soc_comfort - soc_min)
-    scarcity = min(1.0, max(_settings.CLIMATE_ENERGY_FLOOR, scarcity))
+    # Energy is only truly cheap when there is sun to recharge what the fan
+    # spends. At night (solar ~0) there is no recharge, so even a full battery
+    # pays a real cost via a higher floor; daytime keeps the low floor.
+    daylight = obs.solar_power_w > _settings.CLIMATE_SOLAR_DAYLIGHT_W
+    floor = _settings.CLIMATE_ENERGY_FLOOR if daylight else _settings.CLIMATE_ENERGY_FLOOR_NIGHT
+    scarcity = min(1.0, max(floor, scarcity))
     energy = -(action.fan_percentage / 100.0) * scarcity
 
     return _settings.CLIMATE_REWARD_COMFORT_WEIGHT * comfort + _settings.CLIMATE_REWARD_ENERGY_WEIGHT * energy

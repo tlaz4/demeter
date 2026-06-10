@@ -167,6 +167,8 @@ class TestComputeReward(unittest.TestCase):
         mock_settings.CLIMATE_SAFETY_SOC_MIN = 15.0
         mock_settings.CLIMATE_SOC_COMFORT = 40.0
         mock_settings.CLIMATE_ENERGY_FLOOR = 0.1
+        mock_settings.CLIMATE_ENERGY_FLOOR_NIGHT = 0.5
+        mock_settings.CLIMATE_SOLAR_DAYLIGHT_W = 10.0
 
     @patch("climate._settings")
     def test_in_range_zero_comfort_penalty(self, mock_settings):
@@ -198,14 +200,6 @@ class TestComputeReward(unittest.TestCase):
         self.assertAlmostEqual(compute_reward(obs, action), -1.0)
 
     @patch("climate._settings")
-    def test_energy_nearly_free_when_battery_full(self, mock_settings):
-        # High SOC -> scarcity clamped to the floor (0.1), so the fan is ~free.
-        self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
-        obs = _obs(air_temp_c=20.0, soc_pct=98.0)
-        action = ClimateAction(fan=FanAction(percentage=100))
-        self.assertAlmostEqual(compute_reward(obs, action), -0.1)
-
-    @patch("climate._settings")
     def test_energy_scales_between_floor_and_safety(self, mock_settings):
         # Midway (soc=27.5) between safety floor (15) and comfort (40) -> scarcity 0.5.
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
@@ -214,9 +208,35 @@ class TestComputeReward(unittest.TestCase):
         self.assertAlmostEqual(compute_reward(obs, action), -0.5)
 
     @patch("climate._settings")
+    def test_energy_floor_low_in_daylight(self, mock_settings):
+        # Daytime (solar above the cutoff) keeps the low floor -> fan ~free.
+        self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
+        obs = _obs(air_temp_c=20.0, soc_pct=98.0, solar_power_w=150.0)
+        action = ClimateAction(fan=FanAction(percentage=100))
+        self.assertAlmostEqual(compute_reward(obs, action), -0.1)
+
+    @patch("climate._settings")
+    def test_energy_floor_high_at_night(self, mock_settings):
+        # At night (solar ~0) a full battery still pays a real cost (night floor
+        # 0.5), so the fan isn't run pointlessly while there is no recharge.
+        self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
+        obs = _obs(air_temp_c=20.0, soc_pct=98.0, solar_power_w=0.0)
+        action = ClimateAction(fan=FanAction(percentage=100))
+        self.assertAlmostEqual(compute_reward(obs, action), -0.5)
+
+    @patch("climate._settings")
+    def test_low_soc_overrides_daylight_floor(self, mock_settings):
+        # SOC scarcity still dominates the floor: a draining battery is expensive
+        # even in full sun.
+        self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
+        obs = _obs(air_temp_c=20.0, soc_pct=15.0, solar_power_w=150.0)
+        action = ClimateAction(fan=FanAction(percentage=100))
+        self.assertAlmostEqual(compute_reward(obs, action), -1.0)
+
+    @patch("climate._settings")
     def test_no_fan_no_energy_cost(self, mock_settings):
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
-        obs = _obs(air_temp_c=20.0, soc_pct=15.0)
+        obs = _obs(air_temp_c=20.0, soc_pct=15.0, solar_power_w=0.0)
         action = ClimateAction(fan=None)
         self.assertAlmostEqual(compute_reward(obs, action), 0.0)
 
