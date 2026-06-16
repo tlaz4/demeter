@@ -72,9 +72,20 @@ class QLearner:
             return
         try:
             data = json.loads(path.read_text())
+            migrated = 0
             for k, v in data["q"].items():
+                if len(v) < self.n_actions:
+                    # Action space grew (e.g. a new actuator) — keep the learned
+                    # values for existing actions, start new ones at zero.
+                    v = v + [0.0] * (self.n_actions - len(v))
+                    migrated += 1
+                elif len(v) > self.n_actions:
+                    v = v[: self.n_actions]
+                    migrated += 1
                 self._q[k] = v
             self.epsilon = data.get("epsilon", self.epsilon)
+            if migrated:
+                logger.info("Migrated %d Q-rows to n_actions=%d", migrated, self.n_actions)
             logger.info("Loaded Q-table: %d states, epsilon=%.4f", len(self._q), self.epsilon)
         except Exception as e:
             logger.warning("Failed to load Q-table: %s", e)

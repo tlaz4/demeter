@@ -44,6 +44,7 @@ class DecisionLog(Base):
             "solar_power_w": obs.get("solar_power_w"),
             "forecast_high_c": obs.get("forecast_high_c"),
             "fan_percentage": fan.get("percentage", 0),
+            "mist": bool(action.get("mist", False)),
             "policy_name": self.policy_name,
             "reason": self.reason,
             "reward": self.reward,

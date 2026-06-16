@@ -14,6 +14,7 @@ from climate import (
     ClimateAction,
     ClimateObservation,
     ClimatePolicy,
+    apply_mist_safety,
     compute_reward,
     safety_override,
 )
@@ -111,13 +112,16 @@ class ClimateControlActivities:
             action, reason = self._policy.decide(obs)
             policy_name = self._policy.name
 
+        # Hard humidity rail on the mister, applied to whatever was chosen.
+        action = apply_mist_safety(obs, action)
+
         await self._execute(action)
         self._prev_log_id = self._log_decision(obs, action, policy_name, reason)
 
         logger.info(
-            "Climate: %.1f°C / %.1f%% RH | SOC %.1f%% | Forecast %.0f°C | Fan %d%% | %s (%s) | reward=%s",
+            "Climate: %.1f°C / %.1f%% RH | SOC %.1f%% | Forecast %.0f°C | Fan %d%% | Mist %s | %s (%s) | reward=%s",
             obs.air_temp_c, obs.humidity_pct, obs.soc_pct, obs.forecast_high_c,
-            action.fan_percentage, reason, policy_name,
+            action.fan_percentage, "on" if action.mist else "off", reason, policy_name,
             f"{reward:.3f}" if reward is not None else "n/a",
         )
 
@@ -165,16 +169,20 @@ class ClimateControlActivities:
         )
 
     async def _execute(self, action: ClimateAction) -> None:
-        if action.fan is None:
-            return
-        entity_id = _settings.HA_ENTITY_FAN
-        if action.fan.percentage == 0:
-            await self._ha.call_service("fan", "turn_off", {"entity_id": entity_id})
-        else:
-            await self._ha.call_service("fan", "set_percentage", {
-                "entity_id": entity_id,
-                "percentage": action.fan.percentage,
-            })
+        if action.fan is not None:
+            entity_id = _settings.HA_ENTITY_FAN
+            if action.fan.percentage == 0:
+                await self._ha.call_service("fan", "turn_off", {"entity_id": entity_id})
+            else:
+                await self._ha.call_service("fan", "set_percentage", {
+                    "entity_id": entity_id,
+                    "percentage": action.fan.percentage,
+                })
+
+        # Mister is an on/off switch entity in HA.
+        mister = _settings.HA_ENTITY_MISTER
+        service = "turn_on" if action.mist else "turn_off"
+        await self._ha.call_service("switch", service, {"entity_id": mister})
 
     def _log_decision(
         self,

@@ -1,6 +1,6 @@
-# Climate control (Q-learning fan policy)
+# Climate control (Q-learning fan + mister policy)
 
-How demeter decides the greenhouse fan setting. The learner is a tabular
+How demeter decides the greenhouse fan and mister settings. The learner is a tabular
 Q-learner (`demeter/qlearning.py`); the greenhouse-specific state, actions,
 reward, and safety rails live in `demeter/climate.py`. All tunables are in
 `demeter/settings/settings.py` (`CLIMATE_*`).
@@ -20,7 +20,7 @@ boundaries):
 | feature   | edges          | bins | meaning of each bin                                   |
 |-----------|----------------|------|-------------------------------------------------------|
 | temp °C   | `13, 20, 28, 35` | 5  | `<13` / `13–20` / `20–28` / `28–35` / `≥35`           |
-| humidity %| `40, 65, 85`   | 4    | `<40` / `40–65` / `65–85` / `≥85`                     |
+| humidity %| `50, 60, 70`   | 4    | `<50` dry / `50–60` / `60–70` / `≥70` humid           |
 | SOC %     | `15, 30, 60`   | 4    | `<15` / `15–30` / `30–60` / `≥60`                     |
 | solar W   | `10, 100`      | 3    | `<10` (night) / `10–100` (day) / `≥100` (strong gen)  |
 | forecast °C | `20, 30`     | 3    | `<20` / `20–30` / `≥30`                               |
@@ -36,10 +36,9 @@ Notes / known sharp edges:
   switches on. Keep them equal. Bin 2 (`≥100`) is rarely visited while the
   battery sits full (the controller throttles solar in absorption), so solar is
   effectively night-vs-day in practice.
-- **humidity** currently carries **no reward weight** — it inflates the table
-  4× but does nothing for the objective yet. It stays for the planned misting
-  actuator, which adds a humidity comfort term; realign these edges to the
-  comfort band (`~45, 60, 75`) as part of that work.
+- **humidity** edges align with the comfort band (50/70, where the crops are
+  happy), with 60% (the sweet spot) splitting the in-band region — so the policy
+  can condition on the same boundaries the humidity reward changes at.
 - **SOC** scarcity in the reward ramps over 15–40%, but the bins break at
   15/30/60. Within bin 2 (30–60%) the policy can't see the 40% scarcity
   boundary. Not urgent (SOC sits ~98% almost always), but add a 40 edge if the
@@ -47,19 +46,47 @@ Notes / known sharp edges:
 
 ## Actions
 
-Fan percentage, discretized to `FAN_LEVELS = [0, 25, 50, 75, 100]` (5 actions).
+The cross product of fan and mister: `FAN_LEVELS = [0, 25, 50, 75, 100]` ×
+mist `{off, on}` = **10 actions**. Ordered mist-off block (indices 0–4) then
+mist-on block (5–9), so a Q-table saved under the old fan-only space migrates
+cleanly (old fan index → same index; `QLearner` pads short rows on load). The
+mister is an on/off switch entity (`HA_ENTITY_MISTER`); a pond fogger ~16 W.
 
 ## Reward
 
-`compute_reward(obs, action)` = `W_comfort · comfort + W_energy · energy`.
+`compute_reward(obs, action)` =
+`W_comfort · comfort + W_humidity · humidity + W_energy · energy + W_water · water`.
 
-### Comfort
+### Comfort (temperature)
 ```
 comfort = −( max(0, TEMP_MIN − temp, temp − TEMP_MAX) )²
 ```
 Zero inside the comfort band `[CLIMATE_TEMP_MIN_C, CLIMATE_TEMP_MAX_C]` =
 `[13, 28]°C`; a steep quadratic penalty for how far temp strays outside it
 (e.g. −25 at 33°C, −81 at 37°C). This term dominates when out of band.
+
+### Humidity comfort
+```
+humidity = −( max(0, HUMIDITY_MIN − rh, rh − HUMIDITY_MAX) )²
+```
+Zero inside `[50, 70]%` RH (where the crops are happy), quadratic penalty
+outside. Gives the mister a reason to humidify dry air and to avoid
+over-saturating. Weighted **well below** temperature (`W_humidity = 0.05` vs
+`W_comfort = 1.0`) so plant temp stays the primary objective. ⚠️ This weight is
+a key tuning knob: too high and the immediate humidity penalty drowns out the
+slow-to-learn evaporative-cooling benefit, suppressing useful misting (the same
+trap the energy floor had). The hard 90% humidity rail (below) is the real
+over-saturation backstop.
+
+### Water (mister actuation cost)
+```
+water = −1.0 if mist else 0.0          # flat per-tick cost when the mister runs
+```
+Water is a limited, non-replenishing reservoir, so running the mister carries a
+flat cost (the mister analogue of the fan's energy term, but it doesn't recharge
+with daylight). This gates misting to when the humidity/cooling benefit is worth
+the water. `W_water = 0.3` — like the energy floor, too high suppresses useful
+misting, so tune against data.
 
 ### Energy
 ```
@@ -82,9 +109,12 @@ The fan's energy cost scales with how scarce battery energy is:
 ### Weights / current values
 | setting | value | role |
 |---|---|---|
-| `CLIMATE_REWARD_COMFORT_WEIGHT` | 1.0 | comfort term weight |
-| `CLIMATE_REWARD_ENERGY_WEIGHT`  | 0.3 | energy term weight |
-| `CLIMATE_TEMP_MIN_C` / `_MAX_C` | 13 / 28 | comfort band |
+| `CLIMATE_REWARD_COMFORT_WEIGHT` | 1.0 | temperature comfort weight |
+| `CLIMATE_REWARD_HUMIDITY_WEIGHT`| 0.05 | humidity comfort weight (tuning knob) |
+| `CLIMATE_REWARD_ENERGY_WEIGHT`  | 0.3 | fan energy term weight |
+| `CLIMATE_REWARD_WATER_WEIGHT`   | 0.3 | mister water cost (tuning knob) |
+| `CLIMATE_TEMP_MIN_C` / `_MAX_C` | 13 / 28 | temperature comfort band |
+| `CLIMATE_HUMIDITY_MIN_PCT` / `_MAX_PCT` | 50 / 70 | humidity comfort band |
 | `CLIMATE_SOC_COMFORT`           | 40 | SOC at/above which energy is cheap |
 | `CLIMATE_ENERGY_FLOOR`          | 0.1 | daytime energy-cost floor |
 | `CLIMATE_ENERGY_FLOOR_NIGHT`    | 0.5 | night energy-cost floor |
@@ -92,18 +122,30 @@ The fan's energy cost scales with how scarce battery energy is:
 
 ## Safety rails
 
-Checked before the policy (`safety_override`), bypassing Q-learning:
-- `soc < CLIMATE_SAFETY_SOC_MIN` (`15%`) → fan **off** (protect the battery).
-- `air_temp ≥ CLIMATE_SAFETY_TEMP_MAX` (`38°C`) → fan **100%** (protect plants).
+Full overrides checked before the policy (`safety_override`), bypassing Q-learning:
+- `soc < CLIMATE_SAFETY_SOC_MIN` (`15%`) → fan **off**, mist **off** (protect the battery).
+- `air_temp ≥ CLIMATE_SAFETY_TEMP_MAX` (`38°C`) → fan **100%** + mist **on** — heat
+  emergency throws all cooling at it, since the fan alone can't hold peak afternoons.
+
+A separate clamp (`apply_mist_safety`) is applied to whatever action is finally
+chosen (policy or override):
+- `humidity ≥ CLIMATE_SAFETY_HUMIDITY_MAX` (`90%`) → mist forced **off**
+  (fungal / condensation guard). This is the hard backstop on over-humidifying.
 
 ## Warm start
 
-On an empty Q-table, `ClimatePolicy._warm_start` seeds heuristic values (hot →
-favor fan, cold → favor off, humid → more fan, low solar → penalize fan) so the
-policy is sane before it has learned anything.
+On an empty Q-table, `ClimatePolicy._warm_start` seeds heuristic values so the
+policy is sane before it has learned anything: hot → favor fan, cold → favor off,
+too humid → more fan + avoid mist, too dry → favor mist, hot → favor mist (it
+cools), low solar → penalize fan.
 
-## Planned (not yet implemented)
+## Notes / future
 
-- **Misting actuator** (ultrasonic foggers): adds a humidity comfort term to the
-  reward and a mist action to the policy; realign humidity bins then. Mist draws
-  negligible power, so it is regulated by the humidity band, not an energy cost.
+- **Action-space size.** 10 actions doubles the exploration needed per state vs
+  the old 5, which worsens the (already poor) hot-state sample efficiency — hot
+  states are rare, so the fan/mist response there learns slowly. See below.
+- **World model (roadmap).** Model-free Q-learning struggles to learn the
+  fan/mister cooling effect in rare, transient hot states (the signal is small
+  and confounded with exogenous heat). A learned thermal dynamics model would
+  let the controller *reason* about cooling instead of discovering it through
+  noisy trial-and-error — the principled fix for the hot regime.
