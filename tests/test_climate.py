@@ -292,10 +292,11 @@ class TestComputeReward(unittest.TestCase):
         self.assertAlmostEqual(compute_reward(obs, ClimateAction()), 0.0)
 
     @patch("climate._settings")
-    def test_humidity_too_high_penalty(self, mock_settings):
+    def test_high_humidity_not_penalized(self, mock_settings):
+        # Asymmetric: high RH is uncontrollable (can't dehumidify), so no penalty.
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=0.0, humidity_weight=1.0)
-        obs = _obs(air_temp_c=20.0, humidity_pct=85.0)  # 15 over the 70% ceiling
-        self.assertAlmostEqual(compute_reward(obs, ClimateAction()), -225.0)
+        obs = _obs(air_temp_c=20.0, humidity_pct=85.0)
+        self.assertAlmostEqual(compute_reward(obs, ClimateAction()), 0.0)
 
     @patch("climate._settings")
     def test_humidity_too_low_penalty(self, mock_settings):
@@ -305,9 +306,9 @@ class TestComputeReward(unittest.TestCase):
 
     @patch("climate._settings")
     def test_humidity_weighted_below_temperature(self, mock_settings):
-        # Same overshoot magnitude: temperature must dominate humidity.
+        # Same overshoot magnitude (dry side): temperature must dominate humidity.
         self._configure(mock_settings, comfort_weight=1.0, energy_weight=0.0, humidity_weight=0.05)
-        obs = _obs(air_temp_c=38.0, humidity_pct=80.0)  # 10°C over, 10% over
+        obs = _obs(air_temp_c=38.0, humidity_pct=40.0)  # 10°C over, 10% below floor
         # temp: -100 * 1.0 = -100 ; humidity: -100 * 0.05 = -5
         self.assertAlmostEqual(compute_reward(obs, ClimateAction()), -105.0)
 

@@ -65,18 +65,22 @@ Zero inside the comfort band `[CLIMATE_TEMP_MIN_C, CLIMATE_TEMP_MAX_C]` =
 `[13, 28]°C`; a steep quadratic penalty for how far temp strays outside it
 (e.g. −25 at 33°C, −81 at 37°C). This term dominates when out of band.
 
-### Humidity comfort
+### Humidity comfort (asymmetric — too-dry only)
 ```
-humidity = −( max(0, HUMIDITY_MIN − rh, rh − HUMIDITY_MAX) )²
+humidity = −( max(0, HUMIDITY_MIN − rh) )²      # penalty only below 50% RH
 ```
-Zero inside `[50, 70]%` RH (where the crops are happy), quadratic penalty
-outside. Gives the mister a reason to humidify dry air and to avoid
-over-saturating. Weighted **well below** temperature (`W_humidity = 0.05` vs
-`W_comfort = 1.0`) so plant temp stays the primary objective. ⚠️ This weight is
-a key tuning knob: too high and the immediate humidity penalty drowns out the
-slow-to-learn evaporative-cooling benefit, suppressing useful misting (the same
-trap the energy floor had). The hard 90% humidity rail (below) is the real
-over-saturation backstop.
+Penalises **too dry** only. The mister can *add* humidity, but nothing in the
+greenhouse can *remove* it — the fan can't dehumidify when the outside air is
+also humid (measured: venting a rainy-day greenhouse left RH flat at +0.04%/tick
+while draining the battery). So penalising high RH just bought wasteful venting;
+we dropped it. Over-misting into high RH is instead held back by the **water
+cost** and the **90% safety rail**. Weighted well below temperature
+(`W_humidity = 0.05` vs `W_comfort = 1.0`) so plant temp stays primary.
+
+The fan is therefore driven by **temperature only**; the **mister** is the sole
+humidity actuator (humidify when dry). Making the fan a *conditional*
+dehumidifier would need outdoor-humidity in the state — deferred to the world
+model, since it adds a state dimension for a marginal, hard-to-learn effect.
 
 ### Water (mister actuation cost)
 ```
@@ -136,8 +140,8 @@ chosen (policy or override):
 
 On an empty Q-table, `ClimatePolicy._warm_start` seeds heuristic values so the
 policy is sane before it has learned anything: hot → favor fan, cold → favor off,
-too humid → more fan + avoid mist, too dry → favor mist, hot → favor mist (it
-cools), low solar → penalize fan.
+too dry → favor mist, hot → favor mist (it cools), already-humid → avoid mist,
+low solar → penalize fan. (The fan has no humidity prior — it's temperature-only.)
 
 ## Notes / future
 

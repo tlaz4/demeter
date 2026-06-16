@@ -121,13 +121,14 @@ def compute_reward(obs: ClimateObservation, action: ClimateAction) -> float:
     temp_max = _settings.CLIMATE_TEMP_MAX_C
     comfort = -(max(0, temp_min - temp, temp - temp_max)) ** 2
 
-    # Humidity comfort: zero inside the band, quadratic penalty outside. Gives the
-    # mister a reason to humidify dry air and to avoid over-saturating, weighted
-    # well below temperature so it stays a secondary objective.
+    # Humidity comfort — asymmetric, only penalises *too dry*. The mister can add
+    # humidity, but nothing here can remove it (the fan can't dehumidify when the
+    # outside air is also humid), so penalising high RH just drove wasteful
+    # venting that drained the battery. Over-misting is held back by the water
+    # cost and the 90% safety rail instead. Weighted well below temperature.
     hum = obs.humidity_pct
     hum_min = _settings.CLIMATE_HUMIDITY_MIN_PCT
-    hum_max = _settings.CLIMATE_HUMIDITY_MAX_PCT
-    humidity = -(max(0, hum_min - hum, hum - hum_max)) ** 2
+    humidity = -(max(0, hum_min - hum)) ** 2
 
     # Energy only becomes expensive as the battery drains toward its safety
     # floor. While SOC is healthy (solar keeps it topped up) the fan is treated
@@ -201,8 +202,8 @@ class ClimatePolicy:
                     q[i] += frac
                 elif t <= 1:
                     q[i] += 1.0 - frac
-                if h >= 3:           # too humid (>75%) -> vent it out
-                    q[i] += 0.3 * frac
+                # (No fan-for-humidity prior: the fan can't reliably dehumidify,
+                # so it's driven by temperature only.)
                 if s <= 1:
                     q[i] -= 0.5 * frac
                 # Mist priors: cools when hot, humidifies dry air, but avoid

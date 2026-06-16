@@ -48,7 +48,9 @@ HA_ENTITY_WEATHER_FORECAST = "sensor.edmonton_high_temperature"
 CLIMATE_TEMP_MIN_C = 13.0
 CLIMATE_TEMP_MAX_C = 28.0
 # Humidity comfort band (%RH) — matches where the crops are happy (50-70).
-# Sweet spot ~60%; penalty grows outside [min, max].
+# The reward only penalises *too dry* (below min): the mister can humidify, but
+# nothing can remove humidity, so penalising high RH just drove wasteful fan
+# venting. MAX_PCT documents the band top and aligns the bins / mister warm-start.
 CLIMATE_HUMIDITY_MIN_PCT = 50.0
 CLIMATE_HUMIDITY_MAX_PCT = 70.0
 CLIMATE_SAFETY_SOC_MIN = 15.0
