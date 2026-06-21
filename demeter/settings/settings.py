@@ -45,6 +45,9 @@ HA_ENTITY_AIR_TEMPS = [
 ]
 HA_ENTITY_HUMIDITY = "sensor.greenhouse_sensor1_greenhouse_air_humidity"
 HA_ENTITY_WEATHER_FORECAST = "sensor.edmonton_high_temperature"
+# Temperature comfort band. The reward only penalises *too hot* (above MAX) —
+# nothing can warm the greenhouse, so cold isn't penalised. MIN documents the
+# band floor / temp bin edge; re-introduce a cold penalty if a heater is added.
 CLIMATE_TEMP_MIN_C = 13.0
 CLIMATE_TEMP_MAX_C = 28.0
 # Humidity comfort band (%RH) — matches where the crops are happy (50-70).

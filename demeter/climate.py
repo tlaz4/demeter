@@ -116,10 +116,13 @@ def apply_mist_safety(obs: ClimateObservation, action: ClimateAction) -> Climate
 # ---------------------------------------------------------------------------
 
 def compute_reward(obs: ClimateObservation, action: ClimateAction) -> float:
+    # Temperature comfort is asymmetric — only penalises *too hot*. The fan and
+    # mister can cool, but nothing here can warm, so penalising cold added an
+    # uncontrollable cost that muddied the cold-state values and never motivated
+    # a useful action. Re-add a cold term if a heater is ever added (roadmap #4).
     temp = obs.air_temp_c
-    temp_min = _settings.CLIMATE_TEMP_MIN_C
     temp_max = _settings.CLIMATE_TEMP_MAX_C
-    comfort = -(max(0, temp_min - temp, temp - temp_max)) ** 2
+    comfort = -(max(0, temp - temp_max)) ** 2
 
     # Humidity comfort — asymmetric, only penalises *too dry*. The mister can add
     # humidity, but nothing here can remove it (the fan can't dehumidify when the

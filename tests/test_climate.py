@@ -230,11 +230,12 @@ class TestComputeReward(unittest.TestCase):
         self.assertAlmostEqual(compute_reward(obs, action), -25.0)
 
     @patch("climate._settings")
-    def test_below_range_negative_penalty(self, mock_settings):
+    def test_below_range_no_penalty(self, mock_settings):
+        # Asymmetric: cold isn't penalised (no heater — nothing can fix it).
         self._configure(mock_settings)
         obs = _obs(air_temp_c=10.0)
         action = ClimateAction(fan=FanAction(percentage=0))
-        self.assertAlmostEqual(compute_reward(obs, action), -9.0)
+        self.assertAlmostEqual(compute_reward(obs, action), 0.0)
 
     @patch("climate._settings")
     def test_energy_cost_full_at_safety_soc(self, mock_settings):

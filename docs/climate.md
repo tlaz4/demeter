@@ -57,13 +57,18 @@ mister is an on/off switch entity (`HA_ENTITY_MISTER`); a pond fogger ~16 W.
 `compute_reward(obs, action)` =
 `W_comfort · comfort + W_humidity · humidity + W_energy · energy + W_water · water`.
 
-### Comfort (temperature)
+### Comfort (temperature) — asymmetric, too-hot only
 ```
-comfort = −( max(0, TEMP_MIN − temp, temp − TEMP_MAX) )²
+comfort = −( max(0, temp − TEMP_MAX) )²        # penalty only above 28°C
 ```
-Zero inside the comfort band `[CLIMATE_TEMP_MIN_C, CLIMATE_TEMP_MAX_C]` =
-`[13, 28]°C`; a steep quadratic penalty for how far temp strays outside it
-(e.g. −25 at 33°C, −81 at 37°C). This term dominates when out of band.
+Penalises **too hot** only (e.g. −25 at 33°C, −81 at 37°C); dominates when hot.
+**Cold is not penalised** — the fan/mister can cool but nothing can warm, so a
+cold penalty was an uncontrollable cost that muddied the cold-state values and
+never motivated a useful action (it was driving wasteful cold-night venting).
+Same principle as the asymmetric humidity reward: penalise only the directions
+the actuators can fix — **hot** (cool) and **dry** (humidify), not **cold**
+(no heater) or **humid** (no dehumidifier). Re-add a cold term if a heater is
+added (roadmap #4).
 
 ### Humidity comfort (asymmetric — too-dry only)
 ```
