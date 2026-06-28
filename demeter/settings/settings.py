@@ -31,7 +31,7 @@ CLIMATE_MISTER_POWER_W = 16.0   # pond fogger draw — tracked for SOC, not pena
 # type "percentage" — PWM entity, power_w is max draw
 # type "sensor"     — HA power sensor reporting actual watts, power_w unused
 LOADS = [
-    {"name": "fans", "entity_id": "fan.greenhouse_power_module_fan", "power_w": 24.0, "type": "percentage"},
+    {"name": "fans", "entity_id": "fan.greenhouse_power_module_fan", "power_w": 48.0, "type": "percentage"},
     {"name": "mister", "entity_id": HA_ENTITY_MISTER, "power_w": CLIMATE_MISTER_POWER_W, "type": "binary"},
     {"name": "mppt_load", "entity_id": "sensor.greenhouse_solar_module_load_power", "power_w": 0.0, "type": "sensor"},
 ]
