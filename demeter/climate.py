@@ -12,7 +12,9 @@ from qlearning import QLearner
 
 logger = logging.getLogger(__name__)
 
-FAN_LEVELS = [0, 25, 50, 75, 100]
+# Off, or one of two strong modes — the weak low speeds (25/50/75) moved too
+# little air to matter once the exhaust was upgraded to dual fans.
+FAN_LEVELS = [0, 85, 100]
 MIST_LEVELS = [False, True]
 
 
@@ -163,7 +165,7 @@ def compute_reward(obs: ClimateObservation, action: ClimateAction) -> float:
 # ---------------------------------------------------------------------------
 
 class ClimatePolicy:
-    name = "q_learning_v2"
+    name = "q_learning_v3"
 
     def __init__(self, model_path: str | None = None, **kwargs):
         # Actions are (fan%, mist) pairs. Mist-off block first so a Q-table saved

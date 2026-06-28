@@ -341,34 +341,34 @@ class TestClimatePolicy(unittest.TestCase):
 
     def test_action_space_is_fan_times_mist(self):
         policy = self._make_policy()
-        self.assertEqual(len(policy.actions), 10)  # 5 fan levels x mist on/off
+        self.assertEqual(len(policy.actions), 6)  # 3 fan levels (0/85/100) x mist on/off
 
     def test_decide_exploit_picks_best(self):
         policy = self._make_policy()
         obs = _obs()
         key = state_key(obs)
-        # index 3 = (fan 75, mist off) in the mist-off block
-        policy._q.seed(key, [0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        # index 2 = (fan 100, mist off) in the mist-off block
+        policy._q.seed(key, [0.0, 0.0, 5.0, 0.0, 0.0, 0.0])
         action, reason = policy.decide(obs)
-        self.assertEqual(action.fan.percentage, 75)
+        self.assertEqual(action.fan.percentage, 100)
         self.assertFalse(action.mist)
         self.assertEqual(reason, "exploit")
 
     def test_decide_picks_mist_action(self):
         policy = self._make_policy()
         obs = _obs()
-        # index 8 = (fan 75, mist on) in the mist-on block
-        policy._q.seed(state_key(obs), [0.0] * 8 + [5.0, 0.0])
+        # index 4 = (fan 85, mist on) in the mist-on block
+        policy._q.seed(state_key(obs), [0.0, 0.0, 0.0, 0.0, 5.0, 0.0])
         action, _ = policy.decide(obs)
-        self.assertEqual(action.fan.percentage, 75)
+        self.assertEqual(action.fan.percentage, 85)
         self.assertTrue(action.mist)
 
     def test_action_index_round_trips_mist(self):
         policy = self._make_policy()
-        on = ClimateAction(fan=FanAction(percentage=75), mist=True)
-        off = ClimateAction(fan=FanAction(percentage=75), mist=False)
-        self.assertEqual(policy.actions[policy.action_index(on)], (75, True))
-        self.assertEqual(policy.actions[policy.action_index(off)], (75, False))
+        on = ClimateAction(fan=FanAction(percentage=85), mist=True)
+        off = ClimateAction(fan=FanAction(percentage=85), mist=False)
+        self.assertEqual(policy.actions[policy.action_index(on)], (85, True))
+        self.assertEqual(policy.actions[policy.action_index(off)], (85, False))
 
     def test_decide_explore(self):
         policy = self._make_policy(epsilon=1.0)
@@ -386,11 +386,14 @@ class TestClimatePolicy(unittest.TestCase):
 
     def test_action_index_maps_correctly(self):
         policy = self._make_policy()
-        self.assertEqual(policy.action_index(ClimateAction(fan=FanAction(percentage=75))), 3)
+        # index 2 = (fan 100, mist off)
+        self.assertEqual(policy.action_index(ClimateAction(fan=FanAction(percentage=100))), 2)
+        self.assertEqual(policy.action_index(ClimateAction(fan=FanAction(percentage=0))), 0)
 
     def test_action_index_snaps_to_nearest(self):
         policy = self._make_policy()
-        self.assertEqual(policy.action_index(ClimateAction(fan=FanAction(percentage=60))), 2)
+        # 60 snaps to the nearest level (85) -> index 1
+        self.assertEqual(policy.action_index(ClimateAction(fan=FanAction(percentage=60))), 1)
 
     def test_warm_start_populates(self):
         policy = self._make_policy()

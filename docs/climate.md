@@ -46,11 +46,16 @@ Notes / known sharp edges:
 
 ## Actions
 
-The cross product of fan and mister: `FAN_LEVELS = [0, 25, 50, 75, 100]` ×
-mist `{off, on}` = **10 actions**. Ordered mist-off block (indices 0–4) then
-mist-on block (5–9), so a Q-table saved under the old fan-only space migrates
-cleanly (old fan index → same index; `QLearner` pads short rows on load). The
-mister is an on/off switch entity (`HA_ENTITY_MISTER`); a pond fogger ~16 W.
+The cross product of fan and mister: `FAN_LEVELS = [0, 85, 100]` ×
+mist `{off, on}` = **6 actions**. Ordered mist-off block (indices 0–2) then
+mist-on block (3–5). Fan is **off or one of two strong modes** — the weak low
+speeds (25/50/75) moved too little air to matter once the exhaust was upgraded to
+dual fans. The mister is an on/off switch entity (`HA_ENTITY_MISTER`), a pond
+fogger ~16 W.
+
+Note: changing `FAN_LEVELS` changes the *meaning* of the action indices, so a
+saved Q-table from a different fan set can't be migrated by length — **delete it
+and let the policy warm-start** when you change this.
 
 ## Reward
 
