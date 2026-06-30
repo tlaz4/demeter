@@ -24,7 +24,7 @@ SOLAR_DB_PATH = "/tmp/demeter.db"
 
 # Pond fogger (mister) — exposed in HA as an on/off switch entity.
 HA_ENTITY_MISTER = "switch.greenhouse_power_module_fogger"
-CLIMATE_MISTER_POWER_W = 16.0   # pond fogger draw — tracked for SOC, not penalised in the reward
+CLIMATE_MISTER_POWER_W = 32.0   # pond fogger draw — tracked for SOC, not penalised in the reward
 
 # Known loads
 # type "binary"     — on/off entity, power_w is full draw
