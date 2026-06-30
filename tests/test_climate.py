@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from climate import (
+from rl.climate import (
     ClimateAction,
     ClimateObservation,
     ClimatePolicy,
@@ -14,7 +14,7 @@ from climate import (
     safety_override,
     state_key,
 )
-from qlearning import QLearner
+from rl.qlearning import QLearner
 
 SAFETY_SETTINGS = {
     "CLIMATE_SAFETY_SOC_MIN": 15.0,
@@ -148,44 +148,44 @@ class TestDiscretize(unittest.TestCase):
 
 
 class TestSafetyOverride(unittest.TestCase):
-    @patch("climate._settings", **SAFETY_SETTINGS)
+    @patch("rl.climate._settings", **SAFETY_SETTINGS)
     def test_low_soc_forces_fan_off(self, _):
         action = safety_override(_obs(soc_pct=10.0))
         self.assertIsNotNone(action)
         self.assertEqual(action.fan.percentage, 0)
 
-    @patch("climate._settings", **SAFETY_SETTINGS)
+    @patch("rl.climate._settings", **SAFETY_SETTINGS)
     def test_extreme_heat_forces_fan_max_and_mist(self, _):
         action = safety_override(_obs(air_temp_c=40.0))
         self.assertIsNotNone(action)
         self.assertEqual(action.fan.percentage, 100)
         self.assertTrue(action.mist)  # emergency cooling enlists the mister
 
-    @patch("climate._settings", **SAFETY_SETTINGS)
+    @patch("rl.climate._settings", **SAFETY_SETTINGS)
     def test_soc_critical_overrides_heat(self, _):
         action = safety_override(_obs(soc_pct=10.0, air_temp_c=40.0))
         self.assertEqual(action.fan.percentage, 0)
         self.assertFalse(action.mist)
 
-    @patch("climate._settings", **SAFETY_SETTINGS)
+    @patch("rl.climate._settings", **SAFETY_SETTINGS)
     def test_nominal_returns_none(self, _):
         self.assertIsNone(safety_override(_obs()))
 
 
 class TestMistSafety(unittest.TestCase):
-    @patch("climate._settings", **SAFETY_SETTINGS)
+    @patch("rl.climate._settings", **SAFETY_SETTINGS)
     def test_high_humidity_forces_mist_off(self, _):
         action = ClimateAction(fan=FanAction(percentage=50), mist=True)
         clamped = apply_mist_safety(_obs(humidity_pct=95.0), action)
         self.assertFalse(clamped.mist)
         self.assertEqual(clamped.fan.percentage, 50)  # fan untouched
 
-    @patch("climate._settings", **SAFETY_SETTINGS)
+    @patch("rl.climate._settings", **SAFETY_SETTINGS)
     def test_mist_allowed_below_ceiling(self, _):
         action = ClimateAction(fan=FanAction(percentage=50), mist=True)
         self.assertTrue(apply_mist_safety(_obs(humidity_pct=70.0), action).mist)
 
-    @patch("climate._settings", **SAFETY_SETTINGS)
+    @patch("rl.climate._settings", **SAFETY_SETTINGS)
     def test_humidity_clamp_overrides_heat_emergency(self, _):
         # 40°C heat emergency wants mist on, but saturated air forces it off.
         action = safety_override(_obs(air_temp_c=40.0, humidity_pct=95.0))
@@ -215,21 +215,21 @@ class TestComputeReward(unittest.TestCase):
         mock_settings.CLIMATE_ENERGY_FLOOR_NIGHT = 0.5
         mock_settings.CLIMATE_SOLAR_DAYLIGHT_W = 10.0
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_in_range_zero_comfort_penalty(self, mock_settings):
         self._configure(mock_settings)
         obs = _obs(air_temp_c=20.0)
         action = ClimateAction(fan=FanAction(percentage=50))
         self.assertEqual(compute_reward(obs, action), 0.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_above_range_negative_penalty(self, mock_settings):
         self._configure(mock_settings)
         obs = _obs(air_temp_c=33.0)
         action = ClimateAction(fan=FanAction(percentage=0))
         self.assertAlmostEqual(compute_reward(obs, action), -25.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_below_range_no_penalty(self, mock_settings):
         # Asymmetric: cold isn't penalised (no heater — nothing can fix it).
         self._configure(mock_settings)
@@ -237,7 +237,7 @@ class TestComputeReward(unittest.TestCase):
         action = ClimateAction(fan=FanAction(percentage=0))
         self.assertAlmostEqual(compute_reward(obs, action), 0.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_energy_cost_full_at_safety_soc(self, mock_settings):
         # At the SOC safety floor, energy is charged at full cost.
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
@@ -245,7 +245,7 @@ class TestComputeReward(unittest.TestCase):
         action = ClimateAction(fan=FanAction(percentage=100))
         self.assertAlmostEqual(compute_reward(obs, action), -1.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_energy_scales_between_floor_and_safety(self, mock_settings):
         # Midway (soc=27.5) between safety floor (15) and comfort (40) -> scarcity 0.5.
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
@@ -253,7 +253,7 @@ class TestComputeReward(unittest.TestCase):
         action = ClimateAction(fan=FanAction(percentage=100))
         self.assertAlmostEqual(compute_reward(obs, action), -0.5)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_energy_floor_low_in_daylight(self, mock_settings):
         # Daytime (solar above the cutoff) keeps the low floor -> fan ~free.
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
@@ -261,7 +261,7 @@ class TestComputeReward(unittest.TestCase):
         action = ClimateAction(fan=FanAction(percentage=100))
         self.assertAlmostEqual(compute_reward(obs, action), -0.1)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_energy_floor_high_at_night(self, mock_settings):
         # At night (solar ~0) a full battery still pays a real cost (night floor
         # 0.5), so the fan isn't run pointlessly while there is no recharge.
@@ -270,7 +270,7 @@ class TestComputeReward(unittest.TestCase):
         action = ClimateAction(fan=FanAction(percentage=100))
         self.assertAlmostEqual(compute_reward(obs, action), -0.5)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_low_soc_overrides_daylight_floor(self, mock_settings):
         # SOC scarcity still dominates the floor: a draining battery is expensive
         # even in full sun.
@@ -279,33 +279,33 @@ class TestComputeReward(unittest.TestCase):
         action = ClimateAction(fan=FanAction(percentage=100))
         self.assertAlmostEqual(compute_reward(obs, action), -1.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_no_fan_no_energy_cost(self, mock_settings):
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=1.0)
         obs = _obs(air_temp_c=20.0, soc_pct=15.0, solar_power_w=0.0)
         action = ClimateAction(fan=None)
         self.assertAlmostEqual(compute_reward(obs, action), 0.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_humidity_in_band_no_penalty(self, mock_settings):
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=0.0, humidity_weight=1.0)
         obs = _obs(air_temp_c=20.0, humidity_pct=60.0)
         self.assertAlmostEqual(compute_reward(obs, ClimateAction()), 0.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_high_humidity_not_penalized(self, mock_settings):
         # Asymmetric: high RH is uncontrollable (can't dehumidify), so no penalty.
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=0.0, humidity_weight=1.0)
         obs = _obs(air_temp_c=20.0, humidity_pct=85.0)
         self.assertAlmostEqual(compute_reward(obs, ClimateAction()), 0.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_humidity_too_low_penalty(self, mock_settings):
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=0.0, humidity_weight=1.0)
         obs = _obs(air_temp_c=20.0, humidity_pct=30.0)  # 20 below the 50% floor
         self.assertAlmostEqual(compute_reward(obs, ClimateAction()), -400.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_humidity_weighted_below_temperature(self, mock_settings):
         # Same overshoot magnitude (dry side): temperature must dominate humidity.
         self._configure(mock_settings, comfort_weight=1.0, energy_weight=0.0, humidity_weight=0.05)
@@ -313,7 +313,7 @@ class TestComputeReward(unittest.TestCase):
         # temp: -100 * 1.0 = -100 ; humidity: -100 * 0.05 = -5
         self.assertAlmostEqual(compute_reward(obs, ClimateAction()), -105.0)
 
-    @patch("climate._settings")
+    @patch("rl.climate._settings")
     def test_mister_incurs_water_cost(self, mock_settings):
         self._configure(mock_settings, comfort_weight=0.0, energy_weight=0.0, water_weight=0.3)
         obs = _obs(air_temp_c=20.0, humidity_pct=60.0)

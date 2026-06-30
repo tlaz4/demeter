@@ -1,8 +1,8 @@
 # Climate control (Q-learning fan + mister policy)
 
 How demeter decides the greenhouse fan and mister settings. The learner is a tabular
-Q-learner (`demeter/qlearning.py`); the greenhouse-specific state, actions,
-reward, and safety rails live in `demeter/climate.py`. All tunables are in
+Q-learner (`demeter/rl/qlearning.py`); the greenhouse-specific state, actions,
+reward, and safety rails live in `demeter/rl/climate.py`. All tunables are in
 `demeter/settings/settings.py` (`CLIMATE_*`).
 
 This doc is the human-readable source of truth for the **state bins** and the
@@ -153,11 +153,63 @@ policy is sane before it has learned anything: hot → favor fan, cold → favor
 too dry → favor mist, hot → favor mist (it cools), already-humid → avoid mist,
 low solar → penalize fan. (The fan has no humidity prior — it's temperature-only.)
 
+## Offline replay (retraining from the log)
+
+Every decision is logged to the `decision_log` table (raw observation + action),
+so the Q-table can be **rebuilt from history** instead of relying only on the
+live 2-min TD updates. This is the main lever for the sample-efficiency problem,
+and it makes the table robust to redesign.
+
+`demeter/rl/replay.py` reads the whole log, pairs consecutive rows into
+`(s, a, r, s′)` transitions, **recomputes the reward** from the raw observations
+under the *current* `compute_reward`, **re-discretizes** with the current
+`BIN_EDGES`, and sweeps the lot for N epochs into a fresh warm-started table.
+
+Because obs/actions are stored raw (not discretized state keys / action indices),
+replay absorbs redesign for free:
+- change bins → re-discretized automatically
+- add an action → starts fresh, learned online
+- remove an action → its old samples are dropped (or `--snap`'d to nearest fan)
+- retune the reward → recomputed from history, no new data needed
+
+So the Q-table is a disposable cache; **the decision log is the source of truth** —
+delete the table, replay, and you have a fresh, correct policy.
+
+```
+python -m demeter.rl.replay --epochs 20    # rebuild + write CLIMATE_MODEL_PATH
+python -m demeter.rl.replay --dry-run      # report stats, write nothing
+python -m demeter.rl.replay --snap         # keep removed-action samples
+```
+It backs up the existing table to `<path>.bak` before writing.
+
+### Applying it in production (important)
+
+The running worker holds the Q-table **in memory** and saves it to
+`CLIMATE_MODEL_PATH` every tick (`ClimatePolicy.learn → save`), and only *loads*
+the table once at startup. So running replay while the worker is up does **not**
+hot-swap the policy — the worker will overwrite your rebuilt file on its next
+step. To apply a rebuild you must stop the worker, replay, then restart it:
+
+```
+# preview is safe any time (writes nothing):
+docker compose exec worker python -m demeter.rl.replay --dry-run
+
+# apply: stop the writer, rebuild from a container that shares /data, restart
+docker compose stop worker
+docker compose exec api  python -m demeter.rl.replay --epochs 20   # api also mounts /data
+docker compose start worker                                        # loads the new table
+```
+The `api` container shares the `demeter_data` volume, so it can rebuild the table
+while the worker is stopped — avoiding the write race. On k8s: scale the worker
+to 0, run replay in a pod mounting the same PVC, scale back to 1.
+
 ## Notes / future
 
-- **Action-space size.** 10 actions doubles the exploration needed per state vs
-  the old 5, which worsens the (already poor) hot-state sample efficiency — hot
-  states are rare, so the fan/mist response there learns slowly. See below.
+- **Action-space size.** 6 actions (3 fan × 2 mist) need more samples per state
+  to rank than a single actuator would, which worsens the (already poor)
+  hot-state sample efficiency — hot states are rare, so the fan/mist response
+  there learns slowly. Offline replay (above) is the main mitigation; the world
+  model below is the deeper fix.
 - **World model (roadmap).** Model-free Q-learning struggles to learn the
   fan/mister cooling effect in rare, transient hot states (the signal is small
   and confounded with exogenous heat). A learned thermal dynamics model would

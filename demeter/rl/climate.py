@@ -5,10 +5,10 @@ from dataclasses import asdict, dataclass, field
 
 try:
     from demeter import settings as _settings
+    from demeter.rl.qlearning import QLearner
 except ImportError:
     import settings as _settings
-
-from qlearning import QLearner
+    from rl.qlearning import QLearner
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 import json
 
 import settings as _settings
-from climate import (
+from rl.climate import (
     ClimateAction,
     ClimateObservation,
     ClimatePolicy,
